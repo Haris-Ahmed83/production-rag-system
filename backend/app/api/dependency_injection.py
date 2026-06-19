@@ -22,7 +22,9 @@ _vector_database = None
 def get_rag_workflow() -> RAGWorkflow:
     global _rag_workflow
     if _rag_workflow is None:
-        _rag_workflow = RAGWorkflow()
+        embedder = get_embedding_generator()
+        vector_db = get_vector_database()
+        _rag_workflow = RAGWorkflow(embedder=embedder, vector_db=vector_db)
     return _rag_workflow
 
 

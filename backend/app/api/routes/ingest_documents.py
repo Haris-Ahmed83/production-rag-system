@@ -12,6 +12,7 @@ from backend.app.api.dependency_injection import (
     get_text_splitter,
     get_embedding_generator,
     get_vector_database,
+    get_rag_workflow,
 )
 from backend.app.rag_pipeline.document_processing.document_loader import DocumentLoaderFactory
 from backend.app.rag_pipeline.document_processing.text_splitter import TextSplitter
@@ -58,6 +59,9 @@ def upload_document(
         embeddings = embedder.encode(texts)
 
         points_count = vector_db.upsert_chunks(chunks, embeddings)
+
+        workflow = get_rag_workflow()
+        workflow.hybrid_search.build_bm25_index(chunks)
 
         return {
             "message": "Document ingested successfully",
