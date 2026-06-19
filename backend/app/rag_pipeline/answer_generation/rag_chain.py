@@ -58,14 +58,6 @@ class RAGGenerationChain:
                 max_tokens=config.llm_max_tokens,
             )
 
-    def _create_llm_with_fallback(self):
-        """Returns primary LLM and fallback LLM (second Groq key)."""
-        primary = self._create_llm(config.groq_api_key)
-        fallback = None
-        if config.groq_fallback_api_key:
-            fallback = self._create_llm(config.groq_fallback_api_key)
-        return primary, fallback
-
         elif provider == "openai":
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
@@ -86,6 +78,14 @@ class RAGGenerationChain:
                 temperature=config.llm_temperature,
                 num_predict=config.llm_max_tokens,
             )
+
+    def _create_llm_with_fallback(self):
+        """Returns primary LLM and fallback LLM (second Groq key)."""
+        primary = self._create_llm(config.groq_api_key)
+        fallback = None
+        if config.groq_fallback_api_key:
+            fallback = self._create_llm(config.groq_fallback_api_key)
+        return primary, fallback
 
     def format_context(self, chunks: List[dict]) -> str:
         """
