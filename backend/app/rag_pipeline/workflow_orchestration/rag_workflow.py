@@ -62,11 +62,12 @@ class RAGWorkflow:
         )
         return {"retrieved_chunks": results}
 
-    def _noop_node(self, state: WorkflowState) -> dict:
+    def _rerank_node(self, state: WorkflowState) -> dict:
         chunks = state["retrieved_chunks"]
         if not chunks:
             return {"final_chunks": [], "error": "No relevant information found in the knowledge base."}
-        return {"final_chunks": chunks[: config.final_top_k]}
+        reranked = self.reranker.rerank(state["query"], chunks, top_k=config.reranker_top_k)
+        return {"final_chunks": reranked[: config.final_top_k]}
 
     def _generate_node(self, state: WorkflowState) -> dict:
         """
@@ -95,14 +96,14 @@ class RAGWorkflow:
 
         workflow.add_node("query_transform", self._query_transform_node)
         workflow.add_node("hybrid_search", self._hybrid_search_node)
-        workflow.add_node("select_chunks", self._noop_node)
+        workflow.add_node("rerank", self._rerank_node)
         workflow.add_node("generate", self._generate_node)
 
         workflow.set_entry_point("query_transform")
 
         workflow.add_edge("query_transform", "hybrid_search")
-        workflow.add_edge("hybrid_search", "select_chunks")
-        workflow.add_edge("select_chunks", "generate")
+        workflow.add_edge("hybrid_search", "rerank")
+        workflow.add_edge("rerank", "generate")
         workflow.add_edge("generate", END)
 
         self.app = workflow.compile()
