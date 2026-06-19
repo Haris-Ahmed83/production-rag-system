@@ -22,7 +22,7 @@ class AppConfig(BaseSettings):
     llm_model: str = "qwen3:8b"
     llm_base_url: str = "http://localhost:11434"
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 1024
+    llm_max_tokens: int = 2048
 
     groq_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
@@ -35,9 +35,9 @@ class AppConfig(BaseSettings):
     chunk_size: int = 800
     chunk_overlap: int = 100
 
-    retrieval_top_k: int = 50
+    retrieval_top_k: int = 30
     reranker_top_k: int = 5
-    final_top_k: int = 10
+    final_top_k: int = 4
 
     secret_key: str = "change-this-to-a-secure-random-key-in-production"
     jwt_algorithm: str = "HS256"
