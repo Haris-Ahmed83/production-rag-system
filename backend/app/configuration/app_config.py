@@ -22,7 +22,7 @@ class AppConfig(BaseSettings):
     llm_model: str = "qwen3:8b"
     llm_base_url: str = "http://localhost:11434"
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 2048
+    llm_max_tokens: int = 1024
 
     groq_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
@@ -32,12 +32,12 @@ class AppConfig(BaseSettings):
 
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
 
-    chunk_size: int = 500
-    chunk_overlap: int = 80
+    chunk_size: int = 300
+    chunk_overlap: int = 30
 
-    retrieval_top_k: int = 30
+    retrieval_top_k: int = 20
     reranker_top_k: int = 5
-    final_top_k: int = 6
+    final_top_k: int = 4
 
     secret_key: str = "change-this-to-a-secure-random-key-in-production"
     jwt_algorithm: str = "HS256"
