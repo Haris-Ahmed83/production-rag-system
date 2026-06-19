@@ -11,6 +11,7 @@ from qdrant_client.models import (
     HnswConfigDiff,
     ScalarQuantization,
     ScalarQuantizationConfig,
+    SearchParams,
     QuantizationSearchParams,
     VectorParams,
     PointStruct,
@@ -130,9 +131,11 @@ class VectorDatabase:
             query=query_vector,
             limit=top_k,
             query_filter=search_filter,
-            search_params=QuantizationSearchParams(
-                ignore=False,
-                rescore=True,
+            search_params=SearchParams(
+                quantization=QuantizationSearchParams(
+                    ignore=False,
+                    rescore=True,
+                ),
             ),
             with_payload=True,
         )
