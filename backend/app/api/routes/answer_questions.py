@@ -73,24 +73,7 @@ def ask_question(
     )
 
 
-@router.post("/debug-search")
-def debug_search(
-    request: ChatRequest,
-    user: dict = Depends(get_current_user),
-    workflow: RAGWorkflow = Depends(get_rag_workflow),
-):
-    """Debug endpoint: returns raw search results without LLM generation."""
-    from backend.app.rag_pipeline.information_retrieval.hybrid_search import HybridSearch
-    results = workflow.hybrid_search.search(query=request.question, top_k=30)
-    chunks_info = []
-    for r in results:
-        chunks_info.append({
-            "chunk_id": r.get("chunk_id"),
-            "source": r.get("metadata", {}).get("file_name", r.get("metadata", {}).get("source", "?")),
-            "score": r.get("rrf_score", r.get("dense_score", 0)),
-            "text_preview": r.get("text", "")[:100],
-        })
-    return {"total_chunks": len(chunks_info), "chunks": chunks_info}
+
 
 
 async def _stream_answer(question: str, workflow: RAGWorkflow):
