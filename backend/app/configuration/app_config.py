@@ -33,12 +33,12 @@ class AppConfig(BaseSettings):
 
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
 
-    chunk_size: int = 300
-    chunk_overlap: int = 30
+    chunk_size: int = 350
+    chunk_overlap: int = 50
 
-    retrieval_top_k: int = 20
+    retrieval_top_k: int = 30
     reranker_top_k: int = 5
-    final_top_k: int = 4
+    final_top_k: int = 6
 
     secret_key: str = "change-this-to-a-secure-random-key-in-production"
     jwt_algorithm: str = "HS256"
