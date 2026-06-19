@@ -20,7 +20,6 @@ class WorkflowState(TypedDict):
     query: str
     query_variants: List[str]
     retrieved_chunks: List[dict]
-    reranked_chunks: List[dict]
     final_chunks: List[dict]
     generation: Optional[dict]
     error: Optional[str]
@@ -63,43 +62,10 @@ class RAGWorkflow:
         )
         return {"retrieved_chunks": results}
 
-    def _rerank_node(self, state: WorkflowState) -> dict:
-        """
-        Re-ranks retrieved chunks using the cross-encoder.
-        """
-        query = state["query"]
+    def _noop_node(self, state: WorkflowState) -> dict:
         chunks = state["retrieved_chunks"]
-
         if not chunks:
-            return {"reranked_chunks": [], "error": "No chunks retrieved"}
-
-        reranked = self.reranker.rerank(
-            query=query,
-            chunks=chunks,
-            top_k=config.reranker_top_k,
-        )
-        return {"reranked_chunks": reranked}
-
-    def _hallucination_check_node(self, state: WorkflowState) -> dict:
-        """
-        Checks if the retrieved context is sufficient for answering.
-        If too few chunks or low scores, marks an error.
-        """
-        chunks = state["reranked_chunks"]
-
-        if not chunks:
-            return {
-                "error": "No relevant information found in the knowledge base.",
-                "final_chunks": [],
-            }
-
-        top_score = chunks[0].get("reranker_score", 0)
-        if top_score < 0.1:
-            return {
-                "error": "The retrieved information does not confidently answer this question.",
-                "final_chunks": chunks[: config.final_top_k],
-            }
-
+            return {"final_chunks": [], "error": "No relevant information found in the knowledge base."}
         return {"final_chunks": chunks[: config.final_top_k]}
 
     def _generate_node(self, state: WorkflowState) -> dict:
@@ -121,12 +87,6 @@ class RAGWorkflow:
         result = self.generator.generate(query=query, chunks=chunks)
         return {"generation": result, "sources": result.get("sources", [])}
 
-    def _should_generate(self, state: WorkflowState) -> str:
-        """Conditional edge: route to generate or end if error."""
-        if state.get("error") and not state.get("final_chunks"):
-            return "error"
-        return "continue"
-
     def _build_graph(self):
         """
         Builds the LangGraph state machine.
@@ -135,25 +95,14 @@ class RAGWorkflow:
 
         workflow.add_node("query_transform", self._query_transform_node)
         workflow.add_node("hybrid_search", self._hybrid_search_node)
-        workflow.add_node("rerank", self._rerank_node)
-        workflow.add_node("hallucination_check", self._hallucination_check_node)
+        workflow.add_node("select_chunks", self._noop_node)
         workflow.add_node("generate", self._generate_node)
 
         workflow.set_entry_point("query_transform")
 
         workflow.add_edge("query_transform", "hybrid_search")
-        workflow.add_edge("hybrid_search", "rerank")
-        workflow.add_edge("rerank", "hallucination_check")
-
-        workflow.add_conditional_edges(
-            "hallucination_check",
-            self._should_generate,
-            {
-                "continue": "generate",
-                "error": "generate",
-            },
-        )
-
+        workflow.add_edge("hybrid_search", "select_chunks")
+        workflow.add_edge("select_chunks", "generate")
         workflow.add_edge("generate", END)
 
         self.app = workflow.compile()
@@ -167,7 +116,6 @@ class RAGWorkflow:
             "query": query,
             "query_variants": [query],
             "retrieved_chunks": [],
-            "reranked_chunks": [],
             "final_chunks": [],
             "generation": None,
             "error": None,
