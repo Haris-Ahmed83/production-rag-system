@@ -56,7 +56,14 @@ def ask_question(
             media_type="text/event-stream",
         )
 
-    result = workflow.run(request.question)
+    try:
+        result = workflow.run(request.question)
+    except Exception as exc:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow error: {str(exc)}\n{traceback.format_exc()}",
+        )
 
     return ChatResponse(
         question=result["query"],
