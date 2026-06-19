@@ -28,15 +28,25 @@ class HybridSearch:
         """
         Builds a BM25 index from a list of chunks.
         Should be called after ingestion to enable hybrid search.
+        Appends to existing index if one exists.
         """
+        existing_ids = {c["chunk_id"] for c in self._bm25_chunks} if self._bm25_ready else set()
+        new_chunks = [c for c in chunks if c["chunk_id"] not in existing_ids]
+
+        if not new_chunks and self._bm25_ready:
+            return
+
+        all_chunks = list(self._bm25_chunks) + new_chunks if self._bm25_ready else list(new_chunks)
+
         tokenized_chunks = []
-        for chunk in chunks:
+        for chunk in all_chunks:
             tokens = self._tokenize(chunk["text"])
             tokenized_chunks.append(tokens)
 
         self._bm25_index = BM25Okapi(tokenized_chunks)
-        self._bm25_chunks = chunks
+        self._bm25_chunks = all_chunks
         self._bm25_ready = True
+        self._bm25_initialized = True
 
     def _tokenize(self, text: str) -> List[str]:
         """Simple whitespace and punctuation tokenization."""
