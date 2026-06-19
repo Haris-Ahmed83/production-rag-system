@@ -25,6 +25,7 @@ class AppConfig(BaseSettings):
     llm_max_tokens: int = 1024
 
     groq_api_key: str = ""
+    groq_fallback_api_key: str = ""
     groq_model: str = "llama-3.1-8b-instant"
 
     openai_api_key: str = ""
