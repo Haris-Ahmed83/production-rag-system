@@ -8,7 +8,7 @@ from typing import List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    HnswConfig,
+    HnswConfigDiff,
     ScalarQuantization,
     ScalarQuantizationConfig,
     QuantizationSearchParams,
@@ -63,7 +63,7 @@ class VectorDatabase:
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=vector_params,
-                hnsw_config=HnswConfig(
+                hnsw_config=HnswConfigDiff(
                     m=16,
                     ef_construct=200,
                     full_scan_threshold=10000,
