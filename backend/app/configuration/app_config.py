@@ -13,6 +13,7 @@ class AppConfig(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_collection: str = "documents"
+    qdrant_api_key: str = ""
 
     embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_dimension: int = 768

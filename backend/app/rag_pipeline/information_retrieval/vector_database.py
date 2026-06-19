@@ -34,6 +34,11 @@ class VectorDatabase:
 
         if self.is_in_memory:
             self.client = QdrantClient(location=":memory:")
+        elif config.qdrant_api_key:
+            self.client = QdrantClient(
+                url=config.qdrant_host,
+                api_key=config.qdrant_api_key,
+            )
         else:
             self.client = QdrantClient(
                 host=config.qdrant_host,
