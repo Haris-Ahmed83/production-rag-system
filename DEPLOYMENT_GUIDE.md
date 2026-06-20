@@ -3,106 +3,207 @@
 ## Architecture
 
 ```
-User Browser
-     |
-     v
-Vercel (Frontend - React)
-     |
-     | /api/* requests proxied to:
-     v
-Hugging Face Spaces (Backend - FastAPI)
-     |
-     |--- Qdrant Cloud (Vector DB - persistent)
-     |--- Groq API (LLM - llama-3.1-8b-instant, 2 keys for failover)
-     |--- BGE Embeddings (local, ONNX via fastembed)
+┌──────────────┐     ┌──────────────────┐     ┌─────────────┐
+│  User Browser │────▶│  Vercel (React)  │────▶│  HF Spaces  │
+│  (Any device) │     │  Frontend         │     │  FastAPI     │
+└──────────────┘     └──────────────────┘     └──────┬──────┘
+                                                     │
+                          ┌──────────────────────────┼──────────┐
+                          │            │             │          │
+                     ┌────┴────┐ ┌────┴────┐  ┌─────┴─────┐
+                     │ Qdrant  │ │  Groq   │  │    BGE    │
+                     │ Cloud   │ │  LLM    │  │ Embeddings│
+                     │ (Vector)│ │ (2 keys)│  │  (ONNX)   │
+                     └─────────┘ └─────────┘  └───────────┘
 ```
 
 ## URLs
 
 | Component | URL |
 |-----------|-----|
-| Frontend | `https://frontend-olive-one-a95hrma84g.vercel.app` |
-| Backend API | `https://haris-83-rag-backend.hf.space` |
-| Qdrant Cloud | `https://cccfed4d-b54a-45f3-8f66-b37829b804fa.us-east-2-0.aws.cloud.qdrant.io` |
-| GitHub | `https://github.com/Haris-Ahmed83/production-rag-system` |
+| **Frontend** | `https://frontend-olive-one-a95hrma84g.vercel.app` |
+| **Backend API** | `https://haris-83-rag-backend.hf.space` |
+| **Health Check** | `https://haris-83-rag-backend.hf.space/api/health` |
+| **Docker Image** | `ghcr.io/haris-ahmed83/production-rag-system` |
+| **GitHub** | `https://github.com/Haris-Ahmed83/production-rag-system` |
 
-## Backend (HF Space)
+---
 
-### Deployment
-- Auto-deploys from GitHub `main` branch
-- Git push triggers rebuild
-- Secrets set via HF Space dashboard
+## Backend — Hugging Face Spaces
 
-### Secrets (HF Space Settings)
+### Auto-Deploy
+- Push to `main` branch on GitHub triggers rebuild
+- Or upload files via HF API
+
+### Required Secrets
+
+Set these in **HF Space Settings → Repository Secrets**:
 
 | Secret | Value |
 |--------|-------|
 | `QDRANT_HOST` | `https://cccfed4d-b54a-45f3-8f66-b37829b804fa.us-east-2-0.aws.cloud.qdrant.io` |
-| `QDRANT_API_KEY` | Qdrant Cloud API key |
-| `GROQ_API_KEY` | Primary Groq key |
-| `GROQ_FALLBACK_API_KEY` | Fallback key for rate-limit failover |
+| `QDRANT_API_KEY` | *(from Qdrant Cloud dashboard)* |
+| `GROQ_API_KEY` | *(primary Groq API key)* |
+| `GROQ_FALLBACK_API_KEY` | *(secondary, for rate-limit failover)* |
 
-### Config (backend/.env)
-- `CHUNK_SIZE=350`, `CHUNK_OVERLAP=50`
-- `RETRIEVAL_TOP_K=30`, `FINAL_TOP_K=6`
-- `LLM_MAX_TOKENS=1024`, `LLM_TEMPERATURE=0.1`
-- `LLM_PROVIDER=groq`, `GROQ_MODEL=llama-3.1-8b-instant`
-- `EMBEDDING_MODEL=BAAI/bge-base-en-v1.5`
+### Configuration (backend/.env)
 
-## Frontend (Vercel)
+```env
+# Vector DB
+QDRANT_HOST=:memory:              # :memory: for local, cloud URL for prod
+QDRANT_PORT=6333
+QDRANT_COLLECTION=documents
+
+# Embeddings
+EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+EMBEDDING_DIMENSION=768
+
+# Chunking
+CHUNK_SIZE=350
+CHUNK_OVERLAP=50
+
+# Retrieval
+RETRIEVAL_TOP_K=30
+RERANKER_TOP_K=5
+FINAL_TOP_K=6
+
+# LLM
+LLM_PROVIDER=groq
+GROQ_MODEL=llama-3.1-8b-instant
+LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=1024
+```
+
+### Dockerfile (HF Space)
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+ENV PYTHONPATH=/app
+EXPOSE 7860
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+```
+
+---
+
+## Frontend — Vercel
 
 ### Rewrites (vercel.json)
-Requests to `/api/*` are proxied to the HF Space backend:
+
+Requests to `/api/*` proxy to the HF Space backend:
+
 ```json
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://haris-83-rag-backend.hf.space/api/$1" }
   ]
 }
 ```
 
+### Deploy
+```bash
+cd frontend
+npx vercel --prod
+```
+
+---
+
 ## Qdrant Cloud
 
-- Free tier: 1GB storage
-- In-memory mode for local dev (`QDRANT_HOST=:memory:`)
-- Cloud mode when `QDRANT_API_KEY` is set
-- Data persists across HF Space restarts
+### Setup
+1. Go to [cloud.qdrant.io](https://cloud.qdrant.io)
+2. Sign up (free tier: 1GB storage)
+3. Create a new cluster
+4. Copy the **Cluster URL** and **API Key**
+5. Set as HF Space secrets
 
-## Key Upgrades
+### Connection Modes
 
-| # | Upgrade | Status |
-|---|---------|--------|
-| 1 | Qdrant Cloud (persistent DB) | Done |
-| 2 | Cross-encoder reranker (graceful fallback) | Done |
-| 3 | Custom domain | Skipped (no domain) |
+| Mode | Condition | Client Init |
+|------|-----------|-------------|
+| **In-memory** | `QDRANT_HOST=:memory:` | `QdrantClient(location=":memory:")` |
+| **Cloud** | `QDRANT_API_KEY` is set | `QdrantClient(url=host, api_key=key)` |
+| **Local** | host:port without API key | `QdrantClient(host=host, port=port)` |
 
-## Running Locally
+---
 
+## GitHub Packages
+
+Docker images are auto-published to GHCR on every push to `main`:
+
+```
+ghcr.io/haris-ahmed83/production-rag-system:latest
+ghcr.io/haris-ahmed83/production-rag-system:<commit-sha>
+```
+
+### Usage
 ```bash
-cd backend
+docker pull ghcr.io/haris-ahmed83/production-rag-system:latest
+docker run -p 8000:8000 ghcr.io/haris-ahmed83/production-rag-system
+```
+
+---
+
+## Local Development
+
+### Prerequisites
+- Python 3.12+
+- Node.js 18+
+
+### Backend
+```bash
+git clone https://github.com/Haris-Ahmed83/production-rag-system.git
+cd production-rag-system/backend
 pip install -r requirements.txt
 echo "QDRANT_HOST=:memory:" > .env
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
+### Frontend
 ```bash
-cd frontend
+cd ../frontend
 npm install
 npm run dev
 ```
 
-## Testing
+---
 
-Stress test script at `C:\Users\haris\AppData\Local\Temp\complex_test.py`
-- 13 files, 22 queries
-- Expected accuracy: 95%+
+## Stress Testing
 
-## Cost Summary
+```bash
+python C:\Users\haris\AppData\Local\Temp\complex_test.py
+```
+
+Tests 22 queries across 13 complex documents. Expected accuracy: **95%+**.
+
+---
+
+## Cost Breakdown
 
 | Service | Plan | Cost |
 |---------|------|------|
 | Vercel | Hobby | Free |
-| HF Spaces | Free (cpu-basic) | Free |
+| HF Spaces | Free (cpu-basic, 2GB RAM) | Free |
 | Qdrant Cloud | Free (1GB) | Free |
-| Groq API | Free (2 keys, 12000 TPM) | Free |
+| Groq API | Free (2 keys, 12k TPM combined) | Free |
+| GitHub Actions | Free (2,000 min/mo) | Free |
+| GitHub Packages | Free (500 MB) | Free |
 | **Total** | | **$0/month** |
+
+---
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| 500 on `/api/query/chat` | Check `HnswConfigDiff` / `SearchParams` in qdrant-client v1.18 |
+| Empty Qdrant Cloud | Verify `QDRANT_HOST` and `QDRANT_API_KEY` secrets are set |
+| Groq 429 rate limit | System auto-fails to fallback key + retries |
+| HF Space in-memory reset | Migrate to Qdrant Cloud for persistence |
+| Reranker OOM | Runs on free tier; upgrades to `cpu-upgrade` for full performance |
