@@ -17,3 +17,4 @@ node_modules/
 .ruff_cache/
 *.db
 .cache/
+docs/*.pdf
