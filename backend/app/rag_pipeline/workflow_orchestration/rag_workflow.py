@@ -72,7 +72,8 @@ class RAGWorkflow:
     def _generate_node(self, state: WorkflowState) -> dict:
         """
         Generates the final answer using the LLM with retrieved context.
-        Falls back to general knowledge if no relevant chunks found.
+        Falls back to general knowledge if no relevant chunks found
+        or if the LLM determines context is irrelevant.
         """
         query = state["query"]
         chunks = state["final_chunks"]
@@ -82,6 +83,21 @@ class RAGWorkflow:
             return {"generation": result, "sources": []}
 
         result = self.generator.generate(query=query, chunks=chunks)
+        answer = result.get("answer", "").lower()
+
+        # If LLM says it can't find the answer in documents, fall back to general knowledge
+        cannot_find_phrases = [
+            "cannot find",
+            "cannot find this information",
+            "not found in the provided documents",
+            "do not have information",
+            "no information",
+            "i cannot find",
+        ]
+        if any(phrase in answer for phrase in cannot_find_phrases):
+            general_result = self.generator.generate_general(query=query)
+            return {"generation": general_result, "sources": []}
+
         return {"generation": result, "sources": result.get("sources", [])}
 
     def _build_graph(self):
