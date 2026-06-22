@@ -72,18 +72,14 @@ class RAGWorkflow:
     def _generate_node(self, state: WorkflowState) -> dict:
         """
         Generates the final answer using the LLM with retrieved context.
+        Falls back to general knowledge if no relevant chunks found.
         """
         query = state["query"]
         chunks = state["final_chunks"]
 
-        if state.get("error") and not chunks:
-            return {
-                "generation": {
-                    "answer": f"I could not find relevant information to answer your question. {state['error']}",
-                    "sources": [],
-                    "source_count": 0,
-                }
-            }
+        if not chunks:
+            result = self.generator.generate_general(query=query)
+            return {"generation": result, "sources": []}
 
         result = self.generator.generate(query=query, chunks=chunks)
         return {"generation": result, "sources": result.get("sources", [])}

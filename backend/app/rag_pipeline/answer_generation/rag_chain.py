@@ -13,6 +13,8 @@ from backend.app.configuration.app_config import config
 from backend.app.rag_pipeline.answer_generation.prompt_templates import (
     SYSTEM_PROMPT,
     USER_PROMPT_TEMPLATE,
+    GENERAL_SYSTEM_PROMPT,
+    GENERAL_USER_TEMPLATE,
 )
 
 
@@ -29,10 +31,20 @@ class RAGGenerationChain:
             ("system", SYSTEM_PROMPT),
             ("user", USER_PROMPT_TEMPLATE),
         ])
+        self.general_prompt = ChatPromptTemplate.from_messages([
+            ("system", GENERAL_SYSTEM_PROMPT),
+            ("user", GENERAL_USER_TEMPLATE),
+        ])
 
         self.chain = (
             RunnablePassthrough()
             | self.prompt
+            | self.llm
+            | StrOutputParser()
+        )
+        self.general_chain = (
+            RunnablePassthrough()
+            | self.general_prompt
             | self.llm
             | StrOutputParser()
         )
@@ -43,8 +55,15 @@ class RAGGenerationChain:
                 | self.fallback_llm
                 | StrOutputParser()
             )
+            self.fallback_general_chain = (
+                RunnablePassthrough()
+                | self.general_prompt
+                | self.fallback_llm
+                | StrOutputParser()
+            )
         else:
             self.fallback_chain = None
+            self.fallback_general_chain = None
 
     def _create_llm(self, api_key: str = None):
         provider = config.llm_provider
@@ -147,6 +166,33 @@ class RAGGenerationChain:
                     "answer": response,
                     "sources": list(self.source_map.values()),
                     "source_count": len(self.source_map),
+                }
+            except Exception as e:
+                last_error = e
+                err = str(e).lower()
+                if ("rate_limit" in err or "429" in err or "413" in err) and name == "primary":
+                    continue
+                raise
+
+        raise last_error
+
+    def generate_general(self, query: str) -> dict:
+        """
+        Generates an answer from the LLM's general knowledge (no context).
+        Used when no relevant documents are found.
+        """
+        chains_to_try = [("primary", self.general_chain)]
+        if self.fallback_general_chain:
+            chains_to_try.append(("fallback", self.fallback_general_chain))
+
+        last_error = None
+        for name, chain in chains_to_try:
+            try:
+                response = chain.invoke({"question": query})
+                return {
+                    "answer": response,
+                    "sources": [],
+                    "source_count": 0,
                 }
             except Exception as e:
                 last_error = e
