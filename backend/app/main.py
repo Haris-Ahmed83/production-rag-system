@@ -3,9 +3,12 @@ FastAPI application entry point for the Production RAG System.
 Configures middleware, registers routes, and starts the server.
 """
 
+import traceback as tb
+import sys
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.app.configuration.app_config import config
 from backend.app.api.middleware.request_logging import RequestLoggingMiddleware
@@ -24,6 +27,17 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catches all unhandled exceptions and returns JSON with traceback."""
+    trace = "".join(tb.format_exception(type(exc), exc, exc.__traceback__))
+    logger = structlog.get_logger()
+    logger.error("unhandled_exception", error=str(exc), traceback=trace)
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "traceback": trace.split("\n")[-10:]},
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +80,19 @@ def system_stats():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Production RAG System", version=config.app_version)
+    # Warm up pipeline components to catch errors early
+    try:
+        from backend.app.rag_pipeline.document_processing.embedding_generator import EmbeddingGenerator
+        gen = EmbeddingGenerator()
+        logger.info("embedding_generator_ok", cache_dir=config.cache_dir)
+    except Exception as e:
+        logger.error("embedding_generator_failed", error=str(e))
+    try:
+        from backend.app.rag_pipeline.information_retrieval.vector_database import VectorDatabase
+        db = VectorDatabase()
+        logger.info("vector_database_ok", host=config.qdrant_host, collection=config.qdrant_collection)
+    except Exception as e:
+        logger.error("vector_database_failed", error=str(e))
 
 
 @app.on_event("shutdown")

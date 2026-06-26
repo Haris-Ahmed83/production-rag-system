@@ -68,6 +68,10 @@ class RAGGenerationChain:
     def _create_llm(self, api_key: str = None):
         provider = config.llm_provider
 
+        # Auto-detect: if provider is ollama but groq keys are set, use groq
+        if provider == "ollama" and config.groq_api_key:
+            provider = "groq"
+
         if provider == "groq":
             from langchain_groq import ChatGroq
             return ChatGroq(
@@ -124,7 +128,7 @@ class RAGGenerationChain:
 
             source_ref = f"[{source_number}] {source_name}"
             if page:
-                source_ref += f" - Page {page}"
+                source_ref += f" (Page {page})"
 
             self.source_map[source_number] = {
                 "source": source_name,
@@ -134,10 +138,14 @@ class RAGGenerationChain:
             }
 
             context_parts.append(
-                f"Source [{source_number}]:\n{chunk['text']}\n"
+                f"--- BEGIN SOURCE [{source_number}] ---\n"
+                f"Document: {source_name}\n"
+                f"{'Page: ' + str(page) if page else ''}\n"
+                f"Content:\n{chunk['text']}\n"
+                f"--- END SOURCE [{source_number}] ---\n"
             )
 
-        return "\n---\n".join(context_parts)
+        return "\n".join(context_parts)
 
     def generate(
         self,
